@@ -52,6 +52,7 @@ datos_notas = all_sheets["Notas"]
 # -------------------------------
 st.header("Sección 1: Datos Básicos")
 with st.form("form1"):
+
     min_date = datetime.date(1900, 1, 1)
     max_date = datetime.date(2050, 12, 31)
 
@@ -70,7 +71,38 @@ with st.form("form1"):
     fecha_nac = st.date_input("Fecha de nacimiento", min_value=min_date, max_value=max_date)
     lugar_nac = st.text_input("Lugar de nacimiento").title()
 
-    fecha_text = fecha_nac.strftime("%B %d, %Y")
+    dia_nac = fecha_nac.day
+    mes_nac = fecha_nac.month
+    anio_nac = fecha_nac.year
+
+    mes_texto = ""
+    match mes_nac:
+        case 1:
+            mes_texto = "Enero"
+        case 2:
+            mes_texto = "Febrero"
+        case 3:
+            mes_texto = "Marzo"
+        case 4:
+            mes_texto = "Abril"
+        case 5:
+            mes_texto = "Mayo"
+        case 6:
+            mes_texto = "Junio"
+        case 7:
+            mes_texto = "Julio"
+        case 8:
+            mes_texto = "Agosto"
+        case 9:
+            mes_texto = "Septiembre"
+        case 10:
+            mes_texto = "Octubre"
+        case 11:
+            mes_texto = "Noviembre"
+        case 12:
+            mes_texto = "Diciembre"
+    
+    fecha_text = (f"{dia_nac} de {mes_texto} del {anio_nac}")
 
     submitted1 = st.form_submit_button("Guardar sección 1")
     if submitted1:
@@ -78,7 +110,7 @@ with st.form("form1"):
         new_row = {"ID": new_id, "Nombre": nombre, "Apodo":apodo, "Edad": edad, "Sexo":sexo,
                    "Altura":altura, "Peso":peso, "Color de cabello":color_cabello, "Color de ojos":color_ojos, "Complexión":complexion,
                    "Ocupación":ocupacion, "Lugar de nacimiento":lugar_nac,
-                   #"Fecha de nacimiento":fecha_nac,
+                   # "Fecha de nacimiento":fecha_nac}
                    "Fecha de nacimiento":fecha_text}
         datos_basico = pd.concat([datos_basico, pd.DataFrame([new_row])], ignore_index=True)
         all_sheets["Básico"] = datos_basico
