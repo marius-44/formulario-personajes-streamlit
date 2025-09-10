@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import datetime
 import os
-import uuid
 from functools import reduce
 
 FILE_PATH = "datos_personajes.xlsx"
@@ -35,6 +34,13 @@ def save_all_sheets(dataframes: dict):
         for sheet, df in dataframes.items():
             df.to_excel(writer, sheet_name=sheet, index=False)
 
+# --- Obtener el próximo ID ---
+def get_next_id(df):
+    if df.empty:
+        return 1
+    else:
+        return int(df["ID"].max()) + 1
+
 # --- App ---
 st.title("Formulario para la creación de personajes")
 
@@ -48,10 +54,30 @@ datos_rol = all_sheets["Rol"]
 datos_notas = all_sheets["Notas"]
 
 # -------------------------------
-# FORMULARIO SECCIÓN 1: Datos Básicos
+# CREAR NUEVO ID
+# -------------------------------
+st.header("Crear nuevo personaje")
+if st.button("Generar nuevo ID"):
+    new_id = get_next_id(datos_basico)
+    new_row = {"ID": new_id, "Nombre": "", "Apodo": "", "Edad": "", "Sexo": "",
+               "Altura": "", "Peso": "", "Color de cabello": "", "Color de ojos": "",
+               "Complexión": "", "Ocupación": "", "Lugar de nacimiento": "",
+               "Fecha de nacimiento": ""}
+    datos_basico = pd.concat([datos_basico, pd.DataFrame([new_row])], ignore_index=True)
+    all_sheets["Básico"] = datos_basico
+    save_all_sheets(all_sheets)
+    st.success(f"¡Nuevo personaje creado con ID {new_id}!")
+    st.rerun()
+
+# -------------------------------
+# SECCIÓN 1: Datos Básicos
 # -------------------------------
 st.header("Sección 1: Datos Básicos")
 with st.form("form1"):
+    if not datos_basico.empty:
+        selected_id = st.selectbox("Selecciona el ID", datos_basico["ID"].tolist())
+    else:
+        selected_id = None
 
     min_date = datetime.date(1900, 1, 1)
     max_date = datetime.date(2050, 12, 31)
@@ -67,7 +93,7 @@ with st.form("form1"):
     color_ojos = st.selectbox("Color de ojos", ["Negro", "Café oscuro", "Café", "Amielado",
         "Avellana", "Verde", "Azul", "Gris", "Violeta"]).lower()
     complexion = st.text_input("Complexión").lower()
-    ocupacion = st.text_input("Ocupación").capitalize()
+    ocupacion = st.text_input("Ocupación").title()
     fecha_nac = st.date_input("Fecha de nacimiento", min_value=min_date, max_value=max_date)
     lugar_nac = st.text_input("Lugar de nacimiento").title()
 
@@ -105,25 +131,26 @@ with st.form("form1"):
     fecha_text = (f"{dia_nac} de {mes_texto} del {anio_nac}")
 
     submitted1 = st.form_submit_button("Guardar sección 1")
-    if submitted1:
-        new_id = str(uuid.uuid4())
-        new_row = {"ID": new_id, "Nombre": nombre, "Apodo":apodo, "Edad": edad, "Sexo":sexo,
-                   "Altura":altura, "Peso":peso, "Color de cabello":color_cabello, "Color de ojos":color_ojos, "Complexión":complexion,
-                   "Ocupación":ocupacion, "Lugar de nacimiento":lugar_nac,
-                   # "Fecha de nacimiento":fecha_nac}
-                   "Fecha de nacimiento":fecha_text}
-        datos_basico = pd.concat([datos_basico, pd.DataFrame([new_row])], ignore_index=True)
+    if submitted1 and selected_id:
+        datos_basico.loc[datos_basico["ID"] == selected_id, ["Nombre", "Apodo", "Edad", "Sexo", "Altura", "Peso",
+                                                             "Color de cabello", "Color de ojos", "Complexión",
+                                                             "Ocupación", "Lugar de nacimiento", "Fecha de nacimiento"]] = \
+        [nombre, apodo, edad, sexo, altura, peso, color_cabello, color_ojos, complexion, ocupacion, lugar_nac, fecha_text]
         all_sheets["Básico"] = datos_basico
         save_all_sheets(all_sheets)
-        st.success(f"Datos básicos guardados con ID {new_id}")
+        st.success(f"Datos básicos guardados para ID {selected_id}")
         st.rerun()
 
 # -------------------------------
-# FORMULARIO SECCIÓN 2: Personalidad
+# SECCIÓN 2: Personalidad
 # -------------------------------
-st.header("Sección 2: Datos de Personalidad")
+st.header("Sección 2: Personalidad")
 with st.form("form2"):
-    selected_id = st.selectbox("Selecciona el ID para asociar", datos_basico["ID"].tolist())
+    if not datos_basico.empty:
+        selected_id = st.selectbox("Selecciona el ID", datos_basico["ID"].tolist(), key="perso_id")
+    else:
+        selected_id = None
+
     frase = st.text_area("Frase típica del personaje").lower()
     rasgo_1 = st.text_input("Rasgo 1").lower()
     rasgo_2 = st.text_input("Rasgo 2").lower()
@@ -131,7 +158,8 @@ with st.form("form2"):
     rasgo_4 = st.text_input("Rasgo 4").lower()
 
     submitted2 = st.form_submit_button("Guardar sección 2")
-    if submitted2:
+    if submitted2 and selected_id:
+        datos_personalidad = datos_personalidad[datos_personalidad["ID"] != selected_id]
         new_row = {"ID": selected_id, "Frase": frase, "Rasgo 1": rasgo_1, "Rasgo 2": rasgo_2, "Rasgo 3": rasgo_3, "Rasgo 4": rasgo_4}
         datos_personalidad = pd.concat([datos_personalidad, pd.DataFrame([new_row])], ignore_index=True)
         all_sheets["Personalidad"] = datos_personalidad
@@ -140,12 +168,16 @@ with st.form("form2"):
         st.rerun()
 
 # -------------------------------
-# FORMULARIO SECCIÓN 3: Rol
+# SECCIÓN 3: Rol
 # -------------------------------
 st.header("Sección 3: Rol en la Historia")
 with st.form("form3"):
-    selected_id = st.selectbox("Selecciona el ID para asociar", datos_basico["ID"].tolist())
-    rol = st.selectbox("Rol en la historia", ["Protagonista", "Ayudante de protagonista", "Escudero",
+    if not datos_basico.empty:
+        selected_id = st.selectbox("Selecciona el ID", datos_basico["ID"].tolist(), key="rol_id")
+    else:
+        selected_id = None
+
+    rol = st.selectbox("Rol en la historia", ["", "Protagonista", "Ayudante de protagonista", "Escudero",
         "Deuteragonista", "Guardián", "Mentor", "Personaje de impacto",
         "Antagonista", "Ayudante de antagonista", "Escéptico", "Obstáculo", "Meta"])
     infancia = st.text_area("Momento clave en la infancia").lower()
@@ -153,25 +185,31 @@ with st.form("form3"):
     necesita = st.text_area("¿Qué es lo que realmente necesita?").lower()
 
     submitted3 = st.form_submit_button("Guardar sección 3")
-    if submitted3:
+    if submitted3 and selected_id:
+        datos_rol = datos_rol[datos_rol["ID"] != selected_id]
         new_row = {"ID": selected_id, "Rol en historia": rol,
                    "Momento de la infancia":infancia, "¿Qué quiere?":quiere, "¿Qué necesita?":necesita}
         datos_rol = pd.concat([datos_rol, pd.DataFrame([new_row])], ignore_index=True)
         all_sheets["Rol"] = datos_rol
         save_all_sheets(all_sheets)
-        st.success(f"Datos del rol guardados para ID {selected_id}")
+        st.success(f"Rol guardado para ID {selected_id}")
         st.rerun()
 
 # -------------------------------
-# FORMULARIO SECCIÓN 4: Notas
+# SECCIÓN 4: Notas
 # -------------------------------
 st.header("Sección 4: Notas adicionales")
 with st.form("form4"):
-    selected_id = st.selectbox("Selecciona el ID para asociar", datos_basico["ID"].tolist())
+    if not datos_basico.empty:
+        selected_id = st.selectbox("Selecciona el ID", datos_basico["ID"].tolist(), key="notas_id")
+    else:
+        selected_id = None
+
     notas = st.text_area("Notas adicionales sobre el personaje")
 
     submitted4 = st.form_submit_button("Guardar sección 4")
-    if submitted4:
+    if submitted4 and selected_id:
+        datos_notas = datos_notas[datos_notas["ID"] != selected_id]
         new_row = {"ID":selected_id, "Notas adicionales":notas}
         datos_notas = pd.concat([datos_notas, pd.DataFrame([new_row])], ignore_index=True)
         all_sheets["Notas"] = datos_notas
@@ -211,8 +249,6 @@ if dfs and not dfs[0].empty:
     )
 
     if st.button("Guardar cambios globales"):
-        edited_df["ID"] = edited_df["ID"].fillna("").apply(lambda x: str(uuid.uuid4()) if x == "" else x)
-
         new_data = {}
         for sheet_name, original_df in all_sheets.items():
             sheet_cols = original_df.columns.tolist()
@@ -223,3 +259,4 @@ if dfs and not dfs[0].empty:
         st.rerun()
 else:
     st.info("No hay datos aún para mostrar.")
+    

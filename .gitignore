@@ -1,2 +1,8 @@
 # Ignorar el .venv
 ./venv
+
+# Ignorar el excel de los datos
+datos_personajes.xlsx
+
+# Ignorar el formulario boceto
+form-desc.py
