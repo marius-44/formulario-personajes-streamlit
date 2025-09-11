@@ -10,9 +10,10 @@ FILE_PATH = "datos_personajes.xlsx"
 def initialize_excel():
     if not os.path.exists(FILE_PATH):
         with pd.ExcelWriter(FILE_PATH) as writer:
+            
             pd.DataFrame(columns=["ID", "Nombre", "Apodo", "Edad", "Sexo",
                 "Altura", "Peso", "Color de cabello", "Color de ojos", "Complexión",
-                "Ocupación", "Lugar de nacimiento", "Fecha de nacimiento"]).to_excel(writer, sheet_name="Básico", index=False)
+                "Ocupación", "Lugar de nacimiento", "Fecha de nacimiento", "Foto"]).to_excel(writer, sheet_name="Básico", index=False)
             
             pd.DataFrame(columns=["ID", 
                 "Frase", "Rasgo 1", "Rasgo 2", "Rasgo 3", "Rasgo 4"]).to_excel(writer, sheet_name="Personalidad", index=False)
@@ -97,49 +98,49 @@ with st.form("form1"):
     fecha_nac = st.date_input("Fecha de nacimiento", min_value=min_date, max_value=max_date)
     lugar_nac = st.text_input("Lugar de nacimiento").title()
 
+    # Subir foto
+    foto = st.file_uploader("Subir foto del personaje", type=["png", "jpg", "jpeg"])
+
     dia_nac = fecha_nac.day
     mes_nac = fecha_nac.month
     anio_nac = fecha_nac.year
 
-    mes_texto = ""
-    match mes_nac:
-        case 1:
-            mes_texto = "Enero"
-        case 2:
-            mes_texto = "Febrero"
-        case 3:
-            mes_texto = "Marzo"
-        case 4:
-            mes_texto = "Abril"
-        case 5:
-            mes_texto = "Mayo"
-        case 6:
-            mes_texto = "Junio"
-        case 7:
-            mes_texto = "Julio"
-        case 8:
-            mes_texto = "Agosto"
-        case 9:
-            mes_texto = "Septiembre"
-        case 10:
-            mes_texto = "Octubre"
-        case 11:
-            mes_texto = "Noviembre"
-        case 12:
-            mes_texto = "Diciembre"
+    meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
+             "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     
-    fecha_text = (f"{dia_nac} de {mes_texto} del {anio_nac}")
+    fecha_text = (f"{dia_nac} de {meses[mes_nac-1]} del {anio_nac}")
 
     submitted1 = st.form_submit_button("Guardar sección 1")
     if submitted1 and selected_id:
-        datos_basico.loc[datos_basico["ID"] == selected_id, ["Nombre", "Apodo", "Edad", "Sexo", "Altura", "Peso",
-                                                             "Color de cabello", "Color de ojos", "Complexión",
-                                                             "Ocupación", "Lugar de nacimiento", "Fecha de nacimiento"]] = \
-        [nombre, apodo, edad, sexo, altura, peso, color_cabello, color_ojos, complexion, ocupacion, lugar_nac, fecha_text]
+        # Crear carpeta de imágenes si no existe
+        if not os.path.exists("images"):
+            os.makedirs("images")
+
+        foto_path = None
+        if foto is not None:
+            ext = os.path.splitext(foto.name)[1]
+            foto_path = (f"images/{selected_id}{ext}")
+            with open(foto_path, "wb") as f:
+                f.write(foto.getbuffer())
+
+        # Guardar datos
+        datos_basico.loc[datos_basico["ID"] == selected_id,
+                         ["Nombre", "Apodo", "Edad", "Sexo", "Altura", "Peso",
+                          "Color de cabello", "Color de ojos", "Complexión",
+                          "Ocupación", "Lugar de nacimiento", "Fecha de nacimiento", "Foto"]] = \
+        [nombre, apodo, edad, sexo, altura, peso, color_cabello, color_ojos,
+         complexion, ocupacion, lugar_nac, fecha_text, foto_path]
+
         all_sheets["Básico"] = datos_basico
         save_all_sheets(all_sheets)
         st.success(f"Datos básicos guardados para ID {selected_id}")
         st.rerun()
+
+# Mostrar imagen si ya existe
+if selected_id:
+    personaje = datos_basico[datos_basico["ID"] == selected_id]
+    if not personaje["Foto"].isnull().values[0]:
+        st.image(personaje["Foto"].values[0], caption="Foto del personaje", width=200)
 
 # -------------------------------
 # SECCIÓN 2: Personalidad
@@ -233,11 +234,16 @@ else:
     st.info("No hay registros para eliminar.")
 
 # -------------------------------
-# MERGE DINÁMICO Y EDICIÓN GLOBAL
+# MERGE DINÁMICO Y EDICIÓN GLOBAL (SIN COLUMNA FOTO)
 # -------------------------------
 dfs = list(all_sheets.values())
 if dfs and not dfs[0].empty:
+    # Hacemos el merge de todas las hojas
     merged_df = reduce(lambda left, right: pd.merge(left, right, on="ID", how="left"), dfs)
+
+    # Excluimos la columna Foto si existe
+    if "Foto" in merged_df.columns:
+        merged_df = merged_df.drop(columns=["Foto"])
 
     st.subheader("Vista global de TODOS los datos (editable)")
     edited_df = st.data_editor(
@@ -245,18 +251,22 @@ if dfs and not dfs[0].empty:
         use_container_width=True,
         num_rows="dynamic",
         key="global_editor",
-        disabled=["ID"]
+        disabled=["ID"]  # ID no editable
     )
 
     if st.button("Guardar cambios globales"):
+        # Restauramos la columna Foto en el proceso de guardado (manteniendo valores originales)
+        if "Foto" in all_sheets["Básico"].columns:
+            merged_df = pd.merge(edited_df, all_sheets["Básico"][["ID", "Foto"]], on="ID", how="left")
+
+        # Reconstruimos las hojas originales
         new_data = {}
         for sheet_name, original_df in all_sheets.items():
             sheet_cols = original_df.columns.tolist()
-            new_data[sheet_name] = edited_df[sheet_cols]
+            new_data[sheet_name] = merged_df[sheet_cols] if all(col in merged_df.columns for col in sheet_cols) else original_df
 
         save_all_sheets(new_data)
         st.success("¡Cambios guardados en todas las hojas!")
         st.rerun()
 else:
     st.info("No hay datos aún para mostrar.")
-    
